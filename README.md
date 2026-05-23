@@ -1,6 +1,6 @@
 # Air-Watch
 
-# Sistema IoT de Monitoreo de Calidad del Aire en Cuerpos de Agua usando LoRa, MQTT, Node-RED, InfluxDB y Grafana
+# Sistema IoT de Monitoreo de Calidad del Aire usando LoRa, MQTT, Node-RED, InfluxDB y Grafana
 
 Air-Watch es un sistema IoT distribuido para el monitoreo remoto de variables asociadas a la calidad del aire y presencia de compuestos contaminantes en zonas cercanas a cuerpos de agua.
 
