@@ -312,6 +312,14 @@ Este sistema fue diseñado como prototipo de monitoreo ambiental para:
 
 # Autores
 
-Proyecto Integrador  
+## Proyecto Integrador  
 Ingeniería en Tecnologías de la Información y Comunicaciones  
-ITSOEH
+ITSOEH  
+
+| Matrícula | Nombre |
+|---|---|
+| 230110063 | Gustavo Barrera Martínez |
+| 230110166 | Leilany Aislin Sanchez Reyes |
+| 230110581 | Bryan Fuentes Perez |
+| 230110530 | Diego Lozano Camargo |
+| 230110579 | Xavier Amed Guerrero Hernandez |
