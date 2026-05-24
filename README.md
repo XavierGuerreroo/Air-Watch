@@ -463,14 +463,14 @@ Este repositorio contiene el código fuente y documentación técnica del protot
 
 # Evidencias del Prototipo
 
-## Prototipo en pruebas (casa al lado del rio)
+## Prototipo en pruebas (casa al lado del río)
 
-![Prototipo AIR-WATCH](img/prototipo_cerca.png)
+![Prototipo AIR-WATCH](./img/PROTOTIPO%20CERCA.png)
 
 ## Prototipo ensamblado
 
-![AIR-WATCH montaje](img/en_galleta.png)
+![AIR-WATCH montaje](./img/EN%20GALLETA.png)
 
-## Platica con directores de CONAGUA
+## Plática con directores de CONAGUA
 
-![Reunión CONAGUA](img/reunion_conagua.png)
+![Reunión CONAGUA](./img/REUNION%20CONAGUA.png)
