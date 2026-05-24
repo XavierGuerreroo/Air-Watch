@@ -1,38 +1,57 @@
+/*
+  AIR-WATCH - LilyGO / Gateway celular MQTT
+
+  Esta tarjeta recibe por UART el JSON que manda la Heltec 2,
+  se conecta a la red celular con la SIM y publica los datos por MQTT.
+
+  Flujo:
+  Heltec 2 -> UART -> LilyGO -> Red celular -> MQTT
+
+  Nota de seguridad:
+  El topic real del equipo no se deja público en el repositorio.
+  Aquí se usa un topic de ejemplo para documentación.
+*/
+
 #define TINY_GSM_MODEM_SIM7000
 
 #include <TinyGsmClient.h>
 #include <PubSubClient.h>
 #include <LittleFS.h>
 
+// Pines del modem SIM7000
 #define UART_BAUD      115200
 #define PIN_TX         27
 #define PIN_RX         26
 #define PWR_PIN        4
 #define LED_INDICATOR  12
 
-// UART desde Heltec 2
+// UART que recibe datos desde Heltec 2
 #define HELTEC_RX      13
 #define HELTEC_TX      14
 
-// Archivo de respaldo en memoria flash
+// Archivo local para guardar datos si falla la conexión
 #define ARCHIVO_CACHE "/cache_tx.log"
 
 HardwareSerial SerialAT(1);
 HardwareSerial SerialHeltec(2);
 
+// Configuración celular Telcel
 const char apn[]      = "internet.itelcel.com";
 const char gprsUser[] = "";
 const char gprsPass[] = "";
 
+// Configuración MQTT
 const char* broker = "broker.hivemq.com";
 const int   port   = 1883;
-const char* topic  = "itics/heltec/datos";
+
+// Topic de ejemplo. Cambiar por el topic real antes de usar en pruebas privadas.
+const char* topic  = "airwatch/demo/datos";
 
 TinyGsm modem(SerialAT);
 TinyGsmClient gsmClient(modem);
 PubSubClient mqtt(gsmClient);
 
-// ===== Control =====
+// Variables para control de conexión y tiempos
 unsigned long ultimoEnvioOK = 0;
 unsigned long ultimoIntentoRecuperacion = 0;
 unsigned long ultimoLogEstado = 0;
@@ -43,14 +62,11 @@ int fallosConsecutivos = 0;
 const unsigned long intervaloRecuperacion = 15000UL;
 const unsigned long timeoutSinEnvio       = 120000UL;
 const unsigned long intervaloLogEstado    = 30000UL;
-const unsigned long intervaloEnvioMQTT    = 2000UL; // 2 segundos
+const unsigned long intervaloEnvioMQTT    = 2000UL;
 
 const int maxFallosAntesReinicio = 4;
 
-// ======================================================
-// VALIDACIÓN JSON
-// ======================================================
-
+// Valida que el JSON tenga la estructura mínima esperada
 bool jsonBasicoValido(String data) {
   data.trim();
 
@@ -67,10 +83,7 @@ bool jsonBasicoValido(String data) {
   return true;
 }
 
-// ======================================================
-// PERSISTENCIA LOCAL CON LittleFS
-// ======================================================
-
+// Guarda un dato en memoria local si no se pudo publicar
 void guardarEnCache(String data) {
   File file = LittleFS.open(ARCHIVO_CACHE, FILE_APPEND);
 
@@ -85,7 +98,8 @@ void guardarEnCache(String data) {
   Serial.println("CACHE: dato guardado en memoria interna");
 }
 
-// Se conserva la función, pero NO se llama automáticamente para evitar ráfagas.
+// Función disponible para reenviar cache si se requiere.
+// No se llama automáticamente para evitar ráfagas en el dashboard.
 void reenviarCache() {
   if (!mqtt.connected()) {
     return;
@@ -107,7 +121,7 @@ void reenviarCache() {
       if (mqtt.publish(topic, linea.c_str())) {
         Serial.println("REENVIO OK desde cache:");
         Serial.println(linea);
-        delay(500); // pequeña pausa si algún día se usa manualmente
+        delay(500);
       } else {
         Serial.println("ERROR reenviando dato de cache, se conserva");
         restante += linea + "\n";
@@ -124,8 +138,7 @@ void reenviarCache() {
   }
 }
 
-// ======================================================
-
+// Enciende físicamente el modem SIM7000 con el pin PWR
 void encenderModem() {
   Serial.println("Encendiendo modem...");
   pinMode(PWR_PIN, OUTPUT);
@@ -147,6 +160,7 @@ void encenderIndicador() {
   digitalWrite(LED_INDICATOR, HIGH);
 }
 
+// Inicializa el modem y muestra información básica
 bool inicializarModem() {
   Serial.println("Inicializando modem...");
 
@@ -168,6 +182,7 @@ bool inicializarModem() {
   return true;
 }
 
+// Espera registro en red celular
 bool esperarRed() {
   Serial.println("Esperando red...");
 
@@ -183,6 +198,7 @@ bool esperarRed() {
   return true;
 }
 
+// Abre conexión de datos móviles usando APN
 bool abrirDatos() {
   Serial.println("Abriendo datos moviles...");
 
@@ -214,6 +230,7 @@ bool conectarRedMovilCompleta() {
   return true;
 }
 
+// Conexión al broker MQTT
 bool conectarMQTT() {
   if (mqtt.connected()) {
     return true;
@@ -230,7 +247,9 @@ bool conectarMQTT() {
   }
 
   Serial.println("Conectando a broker MQTT...");
-  String clienteID = "Xavier-LilyGO-" + String(millis()) + "-" + String(random(1000, 9999));
+
+  // ID genérico para no dejar datos personales en el repositorio
+  String clienteID = "AIRWATCH-GW-" + String(millis()) + "-" + String(random(1000, 9999));
 
   bool ok = mqtt.connect(clienteID.c_str());
 
@@ -238,7 +257,7 @@ bool conectarMQTT() {
     Serial.println("MQTT conectado");
     encenderIndicador();
 
-    // Para demo se desactiva para evitar ráfagas al dashboard
+    // Se deja apagado para evitar ráfagas en demo
     // reenviarCache();
 
     return true;
@@ -250,6 +269,7 @@ bool conectarMQTT() {
   }
 }
 
+// Cierra MQTT y datos para intentar reconectar limpio
 void cerrarSesiones() {
   Serial.println("Cerrando sesiones MQTT/GPRS...");
   mqtt.disconnect();
@@ -258,6 +278,7 @@ void cerrarSesiones() {
   delay(1500);
 }
 
+// Recuperación rápida sin reiniciar físicamente el modem
 bool recuperacionLigera() {
   Serial.println("=== RECUPERACION LIGERA ===");
 
@@ -290,6 +311,7 @@ bool recuperacionLigera() {
   return true;
 }
 
+// Recuperación más fuerte: cierra todo, reinicia modem y reconecta
 bool recuperacionCompleta() {
   Serial.println("=== INICIANDO RECUPERACION COMPLETA ===");
 
@@ -319,6 +341,7 @@ bool recuperacionCompleta() {
   return true;
 }
 
+// Revisa red, datos y MQTT antes de publicar
 bool asegurarConexionTotal() {
   bool redOK   = modem.isNetworkConnected();
   bool datosOK = modem.isGprsConnected();
@@ -344,6 +367,7 @@ bool asegurarConexionTotal() {
   return recuperacionCompleta();
 }
 
+// Publica el JSON en MQTT o lo guarda en cache si falla
 bool publicarJSON(const String& data) {
   if (!asegurarConexionTotal()) {
     Serial.println("No se pudo asegurar conexion total antes de publicar");
@@ -364,7 +388,7 @@ bool publicarJSON(const String& data) {
     ultimoEnvioOK = millis();
     fallosConsecutivos = 0;
 
-    // Para demo se desactiva para evitar ráfagas al dashboard
+    // Se deja desactivado para evitar ráfagas durante pruebas
     // reenviarCache();
 
     return true;
@@ -380,6 +404,7 @@ bool publicarJSON(const String& data) {
   }
 }
 
+// Intenta recuperar conexión de forma periódica si algo cae
 void intentarRecuperacionPeriodica() {
   if (millis() - ultimoIntentoRecuperacion < intervaloRecuperacion) {
     return;
@@ -409,6 +434,7 @@ void intentarRecuperacionPeriodica() {
   }
 }
 
+// Muestra estado cada cierto tiempo para diagnóstico en Monitor Serie
 void imprimirEstadoPeriodico() {
   if (millis() - ultimoLogEstado < intervaloLogEstado) {
     return;
@@ -435,12 +461,12 @@ void setup() {
   delay(3000);
 
   Serial.println("========================================");
-  Serial.println("LILYGO SIM7000 -> MQTT + UART CONTROLADO");
-  Serial.println("Recibe JSON desde Heltec 2");
-  Serial.println("Publica maximo cada 2 segundos");
-  Serial.println("Cache activo, reenvio automatico desactivado");
+  Serial.println("AIR-WATCH GATEWAY INITIALIZED");
+  Serial.println("UART -> Cellular MQTT");
+  Serial.println("Cache local activo");
   Serial.println("========================================");
 
+  // Inicia memoria interna para guardar datos cuando falla el envío
   if (!LittleFS.begin(true)) {
     Serial.println("ERROR: LittleFS no se pudo iniciar");
   } else {
@@ -452,14 +478,17 @@ void setup() {
   pinMode(LED_INDICATOR, OUTPUT);
   apagarIndicador();
 
+  // UART hacia el modem SIM7000
   SerialAT.begin(UART_BAUD, SERIAL_8N1, PIN_RX, PIN_TX);
   delay(500);
 
+  // UART que recibe el JSON desde Heltec 2
   SerialHeltec.begin(115200, SERIAL_8N1, HELTEC_RX, HELTEC_TX);
-  Serial.println("UART desde Heltec 2 lista");
+  Serial.println("UART desde nodo receptor lista");
 
   encenderModem();
 
+  // Intento inicial hasta que el modem y la red queden listos
   while (true) {
     if (inicializarModem() && conectarRedMovilCompleta()) {
       break;
@@ -474,6 +503,7 @@ void setup() {
   mqtt.setKeepAlive(45);
   mqtt.setSocketTimeout(20);
 
+  // Conecta a MQTT antes de comenzar a publicar
   while (!conectarMQTT()) {
     Serial.println("MQTT no conecto en setup. Reintentando en 5 segundos...");
     delay(5000);
@@ -489,7 +519,7 @@ void setup() {
   ultimoLogEstado = millis();
   ultimoEnvioMQTT = 0;
 
-  Serial.println("Esperando JSON desde Heltec 2...");
+  Serial.println("Esperando JSON desde nodo receptor...");
 }
 
 void loop() {
@@ -498,24 +528,25 @@ void loop() {
   intentarRecuperacionPeriodica();
   imprimirEstadoPeriodico();
 
+  // Si llega información desde Heltec 2, se procesa
   if (SerialHeltec.available()) {
     String data = SerialHeltec.readStringUntil('\n');
     data.trim();
 
     if (data.length() > 0) {
-      Serial.println("Recibido desde Heltec 2:");
+      Serial.println("Recibido desde nodo receptor:");
       Serial.println(data);
 
-      // Validar JSON antes de publicar
+      // Evita publicar datos incompletos o basura
       if (!jsonBasicoValido(data)) {
         Serial.println("JSON incompleto o sin campos completos. No se publica.");
         Serial.println("----------------------------------------");
         return;
       }
 
-      // Limitar frecuencia de publicación MQTT
+      // Limita la frecuencia de publicación para no saturar MQTT/Node-RED
       if (millis() - ultimoEnvioMQTT < intervaloEnvioMQTT) {
-        Serial.println("Dato omitido para no saturar MQTT/Node-RED.");
+        Serial.println("Dato omitido para controlar frecuencia MQTT.");
         Serial.println("----------------------------------------");
         return;
       }
@@ -529,6 +560,7 @@ void loop() {
     }
   }
 
+  // Si pasa mucho tiempo sin publicar correctamente, se fuerza recuperación
   if (millis() - ultimoEnvioOK > timeoutSinEnvio) {
     Serial.println("Mucho tiempo sin envio exitoso. Forzando recuperacion completa...");
     recuperacionCompleta();
